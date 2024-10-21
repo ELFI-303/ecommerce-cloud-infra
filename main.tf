@@ -15,31 +15,66 @@ provider "aws" {
   secret_key = "giyF7B/zpH33WI7dU1bHJoPZL+LES/B0ncIw9C0B"
 }
 
-
-# Importer le VPC
-resource "aws_vpc" "main" {
+# 1. Créer le VPC
+resource "aws_vpc" "ecomm-vpc" {
   cidr_block = "10.0.0.0/16"
-}
-
-
-resource "aws_subnet" "publique" {
-  vpc_id            = aws_vpc.main.id  # VPC ID importé
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "eu-west-3a"  # Remplacez par la zone souhaitée
 
   tags = {
-    Name = "ecommerce-subnet-1"
+    Name = "my-vpc"
   }
 }
 
-resource "aws_subnet" "prive" {
-  vpc_id            = aws_vpc.main.id
+# 2. Créer le sous-réseau public
+resource "aws_subnet" "public_subnet" {
+  vpc_id            = aws_vpc.ecomm-vpc.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "eu-west-3a"
+  map_public_ip_on_launch = true  # Associer automatiquement des IP publiques aux instances dans ce sous-réseau
+
+
+  tags = {
+    Name = "public-subnet"
+  }
+}
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id            = aws_vpc.ecomm-vpc.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = "eu-west-3b"
 
   tags = {
-    Name = "ecommerce-subnet-2"
+    Name = "private-subnet"
   }
+}
+
+# 3. Créer l'Internet Gateway
+resource "aws_internet_gateway" "ecomm_gateway" {
+  vpc_id = aws_vpc.ecomm-vpc.id
+
+  tags = {
+    Name = "ecomm-gateway"
+  }
+}
+# 4. Créer la table de routage
+resource "aws_route_table" "public_ecomm_route_table" {
+  vpc_id = aws_vpc.ecomm-vpc.id
+
+  tags = {
+    Name = "ecomm-route-table"
+  }
+}
+
+# 5. Ajouter une route vers l'Internet Gateway dans la table de routage
+resource "aws_route" "internet_access" {
+  route_table_id         = aws_route_table.public_ecomm_route_table.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.ecomm_gateway.id
+}
+
+# 6. Associer la table de routage au sous-réseau public
+resource "aws_route_table_association" "public_association" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public_ecomm_route_table.id
 }
 
 
@@ -66,15 +101,15 @@ resource "aws_security_group" "allow_http" {
   tags = {
     Name = "allow_http"
   }
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.ecomm-vpc.id
 
 }
 
-resource "aws_instance" "ecommerce-ec2" {
+resource "aws_instance" "ecommerce-ec2-test-tf" {
   ami           = "ami-04a790ca5ad2f097c"  # Amazon Linux 2 ou Ubuntu AMI
   instance_type = "t2.micro"
-  subnet_id     = aws_subnet.prive.id
-
+  subnet_id     = aws_subnet.public_subnet.id
+  associate_public_ip_address = true
   # Groupe de sécurité pour autoriser HTTP (port 80)
   vpc_security_group_ids = [aws_security_group.allow_http.id]
 
@@ -85,9 +120,8 @@ resource "aws_instance" "ecommerce-ec2" {
               sudo amazon-linux-extras install nginx1 -y
               sudo systemctl start nginx
               sudo systemctl enable nginx
+              sudo reboot
               EOF
-
-    
 
 
   tags = {
@@ -95,10 +129,11 @@ resource "aws_instance" "ecommerce-ec2" {
   }
 }
 
-resource "aws_instance" "replicate-ecommerce-ec2" {
+resource "aws_instance" "replicate-ecommerce-ec2-test-tf" {
   ami           = "ami-04a790ca5ad2f097c"  # Amazon Linux 2 ou Ubuntu AMI
   instance_type = "t2.micro"
-  subnet_id     = aws_subnet.prive.id
+  subnet_id     = aws_subnet.public_subnet.id
+  associate_public_ip_address = true
   # Groupe de sécurité pour autoriser HTTP (port 80)
   vpc_security_group_ids = [aws_security_group.allow_http.id]
 
@@ -109,6 +144,7 @@ resource "aws_instance" "replicate-ecommerce-ec2" {
               sudo amazon-linux-extras install nginx1 -y
               sudo systemctl start nginx
               sudo systemctl enable nginx
+              sudo reboot
               EOF
   
 
@@ -116,4 +152,3 @@ resource "aws_instance" "replicate-ecommerce-ec2" {
     Name = "Replicate-Ecommerce-EC2"
   }
 }
-
