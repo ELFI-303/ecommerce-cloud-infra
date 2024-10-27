@@ -11,8 +11,8 @@ terraform {
 
 provider "aws" {
   region = "eu-west-3"
-  access_key = "AKIAWCYX7W3FGH4U4TQD"
-  secret_key = "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"
+  access_key = "clé d'accès AWS"
+  secret_key = "Clé secrète AWS"
 }
 
 # 1. Créer le VPC
